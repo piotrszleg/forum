@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Forum</title>
+    <link href="/style.css" rel="stylesheet">
+</head>
+
+<body>
+
+<h1 class="logo">Forum</h1>
+<br>
+<hr>
+<form id="post-form" action="/send" method="post" style="display: none">
+	<button type="button" onclick="edit(event);">edit</button><button type="button" onclick="preview(event);">preview</button>
+	<div id="edit-container">
+		<input type="text" name="parent" id="parent-input" readonly="readonly" value="0" style="display: none"/>
+		<textarea type="text" name="message" id="message-input" rows="4" cols="50" maxlength="2000"></textarea><br>
+	</div>
+	<div id="preview-container" style="display:none; width:25em; height:10em; overflow: scroll;">
+			<-preview->
+	</div>
+	<input type="submit" name="submit" value="reply"/><button type="button" onclick="closeForm(event);">close</button>
+</form>
+<div id="posts-container">
+	<button type="button" id="new-thread" onclick='replyPanel(event);'>new thread</button>
+	<div class='replies'></div>
+</div>
+
+<script>
+//post submission
+var form = document.getElementById('post-form');
+var parent_input = document.getElementById('parent-input');
+
+var edit_container = document.getElementById('edit-container');
+var preview_container = document.getElementById('preview-container');
+
+var threadMatch=/\/([0-9]+)/.exec(window.location);
+var thread=parseInt(threadMatch?threadMatch[1]:0);
+
+if(thread!=0){
+	document.getElementById('new-thread').style.display="none";
+}
+
+//post formatter
+var entityMap = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+  '/': '&#x2F;',
+  '`': '&#x60;',
+  '=': '&#x3D;'
+};
+
+function escapeHtml (string) {
+  return String(string).replace(/[&<>"'`=\/]/g, function (s) {
+    return entityMap[s];
+ });
+}
+function post(id, parent, message){
+	message=format(message)
+	var post="";
+	if(parent==0){// thread starting post
+		post = `
+		<div id='${id}' class="post">
+			<div class="post-content">
+				<a href="#${id}">#${id}</a>
+				<p>${message}</p>
+				<button type="button" onclick='replyPanel(event);'>reply</button>
+				<button type="button" onclick='expand(event);'>replies</button>
+				<button type="button" onclick="location.href='/${id}';">go to</button>
+			</div>
+			<div class='replies' style='display:none'></div>
+		</div>`
+	}else {
+		post = `
+		<div id='${id}' class="post post-nested">
+			<div class="post-content">
+				<a href="#${id}">#${id}</a> in reply to: <a href=#${parent}>#${parent}</a><br>
+				<p>${message}</p>
+				<button type="button" onclick='replyPanel(event);'>reply</button>
+			</div>
+			<div class='replies'></div>
+		</div>`
+	}
+	var parentElement=document.getElementById(parent);
+	if(parentElement!=null)
+		parentElement.getElementsByClassName("replies")[0].innerHTML+=post
+	else
+		document.getElementById('posts-container').innerHTML+=post
+}
+function format(text){
+	return escapeHtml(text)
+				.replace(/(^|\n)(&gt;.+)/g, "<br><span style='color:blue;'>$2</span>")// quote >
+				.replace(/(^|\n)(&lt;.+)/g, "<br><span style='color:red;'>$2</span>")// quote <
+				.replace(/--(\w+)--/g, "<del>$1</del>")// crossed text --text--
+				.replace(/&#x60;(\w+)&#x60;/g, "<code>$1</code>")// code `text`
+				.replace(/(https?:&#x2F;&#x2F;?(\w+\.)+\w+(&#x2F;([\w-?=&#;]|&amp;)+)+\.(jpg|jpeg|png|bmp|gif))/g, "<img src='$1'></img>")// link to image
+				.replace(/(https?:&#x2F;&#x2F;www\.youtube\.com&#x2F;watch\?v=|https:&#x2F;&#x2F;youtu\.be&#x2F;)(.+)\S*/,
+'<iframe width="380" height="250" src="https://www.youtube.com/embed/$2" frameborder="0" allowfullscreen></iframe>')// youtube
+				.replace(/([^'"]|^)(https?:&#x2F;&#x2F;(\w+\.)+\w+(&#x2F;([\w-?=&#;]|&amp;)+)+(&#x2F;)?(\.\w+)?)/g, "<a href='$2' target='_blank'>$2</a>")// link /[^'"](https?:&#x2F;&#x2F;(\w+\.)+\w+(&#x2F;[\w-?=&]+)+&#x2F;)[^'"]/g
+				.replace(/\n/g, "<br>")// new line
+}
+
+function edit(e){
+	preview_container.style.display="none";
+	edit_container.style.display="block";
+}
+function preview(e){
+	edit_container.style.display="none";
+	preview_container.style.display="block";
+	preview_container.innerHTML=format(document.getElementById("message-input").value)+"<br><br>";
+}
+function expand(event){
+	var replies=event.target.parentElement.parentElement.getElementsByClassName("replies")[0];
+	if(replies.style.display=="none"){
+		replies.style.display="block";
+	}else {
+		replies.style.display="none";
+	}
+}
+
+var lastHiddenButton=null;
+
+function replyPanel(event){
+	parent_input.value=event.target.parentElement.parentElement.getAttribute("id");
+	event.target.parentElement.insertBefore(form, event.target);
+	form.style.display="block";
+	event.target.style.display="none";
+	if(lastHiddenButton!==null && lastHiddenButton!==event.target){
+		lastHiddenButton.style.display="inline";
+	}
+	lastHiddenButton=event.target;
+}
+
+function closeForm(e){
+	form.style.display="none";
+	lastHiddenButton.style.display="inline";
+}
+// posts request callback function, 
+// will place received posts in the document and load replies to each post
+function receivePosts(e) {
+	if (this.readyState == 4 && this.status == 200) {
+	   var posts=JSON.parse(e.target.responseText);
+	   for(p in posts){
+	   		loadReplies(posts[p].id);
+	   		post(posts[p].id, posts[p].parent, posts[p].message);
+	   }
+	}
+}
+// load single post of id
+function loadPost(id){
+    var request = new XMLHttpRequest();
+    request.onreadystatechange = receivePosts;
+    request.open('GET', id+'/post.json', true);
+    request.send();
+}
+// load replies to post of id
+function loadReplies(id){
+    var request = new XMLHttpRequest();
+    request.onreadystatechange = receivePosts;
+    request.open('GET', id+'/replies.json', true);
+    request.send();
+}
+
+if(thread!=0){
+	loadPost(thread);
+}
+loadReplies(thread);
+
+form.onsubmit = function(event) {
+    event.preventDefault();
+
+    var request = new XMLHttpRequest();
+    request.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+		   location.reload();
+        }
+    };
+    request.open('POST', '/send', true);
+
+    var formData = new FormData(document.getElementById('post-form'));
+    request.send(formData);
+}
+</script>
+
+</body>
