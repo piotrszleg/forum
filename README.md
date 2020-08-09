@@ -10,9 +10,7 @@ Install mysql and nodejs.
 
 Open `cmd` or unix terminal.
 
-Type in:
-
-`mysqld`
+Type in: `mysqld`
 
 Open second terminal window, navigate to this folder and type in:
 `mysql -u "user" -p "password" < init.sql`
@@ -23,13 +21,9 @@ Replace `user` and `password` with your database's user and password.
 
 In `server.js` replace host, user and password values with the correct values for your environment. 
 
-Type in: 
+Type in: `npm init`
 
-`npm init`
-
-and then:
-
-`node main.js`
+and then: `node main.js`
 
 Open the printed url in your browser and check if it displays the webpage.
 
